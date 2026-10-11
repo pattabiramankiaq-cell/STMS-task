@@ -1,0 +1,9 @@
+image:
+  repository: harbor.company.com/project/api-gateway
+  tag: latest
+
+service:
+  type: ClusterIP
+  port: 5000
+
+replicaCount: 1

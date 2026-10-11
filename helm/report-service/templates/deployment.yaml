@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: {{ include "report-service.fullname" . }}
+  labels:
+    {{- include "report-service.labels" . | nindent 4 }}
+
+spec:
+  replicas: {{ .Values.replicaCount }}
+
+  selector:
+    matchLabels:
+      {{- include "report-service.selectorLabels" . | nindent 6 }}
+
+  template:
+    metadata:
+      labels:
+        {{- include "report-service.selectorLabels" . | nindent 8 }}
+
+    spec:
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+
+      containers:
+      - name: report-service
+
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+        ports:
+        - containerPort: {{ .Values.containerPort }}
+
+        env:
+        - name: PORT
+          value: "{{ .Values.env.PORT }}"
+
+        - name: JWT_SECRET
+          value: "{{ .Values.env.JWT_SECRET }}"
+
+        - name: MONGO_URI
+          value: "{{ .Values.env.MONGO_URI }}"
+
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}

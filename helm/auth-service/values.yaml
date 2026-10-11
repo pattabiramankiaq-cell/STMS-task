@@ -1,0 +1,33 @@
+replicaCount: 1
+
+image:
+  repository: 13.48.106.244/smart-task-management-system/auth-service
+  tag: "23"
+  pullPolicy: Always
+
+imagePullSecrets: []
+
+service:
+  type: ClusterIP
+  port: 5001
+  targetPort: 5001
+
+containerPort: 5001
+
+resources: {}
+
+env:
+  PORT: "5001"
+  JWT_SECRET: "mysecretkey"
+  JWT_EXPIRES_IN: "1d"
+  MONGO_URI: "mongodb://mongodb:27017/taskdb"
+
+ingress:
+  enabled: true
+  className: nginx
+
+  host: auth.smarttask.local
+
+  path: /
+
+  pathType: Prefix

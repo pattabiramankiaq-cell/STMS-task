@@ -1,0 +1,30 @@
+replicaCount: 1
+
+image:
+  repository: 13.48.106.244/smart-task-management-system/api-gateway
+  tag: "31"
+  pullPolicy: Always
+
+imagePullSecrets: []
+
+service:
+  type: ClusterIP
+  port: 5000
+  targetPort: 5000
+
+containerPort: 5000
+
+resources: {}
+
+env:
+  PORT: "5000"
+
+ingress:
+  enabled: true
+  className: nginx
+  host: api.smarttask.local
+  path: /
+  pathType: Prefix
+  tls: false
+
+

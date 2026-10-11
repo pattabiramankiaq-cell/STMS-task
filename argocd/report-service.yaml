@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+
+metadata:
+  name: report-service
+  namespace: argocd
+
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/KameshS021/Smart-Task-Management-System.git
+    targetRevision: main
+    path: helm/report-service
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: smart-task
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+
+    syncOptions:
+      - CreateNamespace=true

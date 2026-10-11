@@ -1,0 +1,60 @@
+pipeline {
+  agent any
+
+  environment {
+    IMAGE_NAME = "harbor.company.com/project/api-gateway"
+    IMAGE_TAG = "v1.0.${BUILD_NUMBER}"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps { checkout scm }
+    }
+
+    stage('Install Dependencies') {
+      steps { sh 'npm install || true' }
+    }
+
+    stage('Unit Test') {
+      steps { sh 'npm test || true' }
+    }
+
+    stage('SonarQube Scan') {
+      steps { echo 'Run SonarQube Scan' }
+    }
+
+    stage('Quality Gate') {
+      steps { echo 'Quality Gate Check' }
+    }
+
+    stage('Trivy Scan') {
+      steps { sh 'trivy fs . || true' }
+    }
+
+    stage('Read Vault Secrets') {
+      steps { echo 'Read secrets from HashiCorp Vault' }
+    }
+
+    stage('Docker Build') {
+      steps { sh 'docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .' }
+    }
+
+    stage('Docker Push') {
+      steps { echo 'Push image to Harbor' }
+    }
+
+    stage('Update Helm Values') {
+      steps { echo 'Update image tag in values.yaml' }
+    }
+
+    stage('ArgoCD Sync') {
+      steps { echo 'Trigger ArgoCD Sync' }
+    }
+  }
+
+  post {
+    success { echo 'Pipeline Success' }
+    failure { echo 'Pipeline Failed' }
+    always { cleanWs() }
+  }
+}

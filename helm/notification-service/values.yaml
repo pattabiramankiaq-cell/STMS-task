@@ -1,0 +1,32 @@
+replicaCount: 1
+
+image:
+  repository: 13.48.106.244/smart-task-management-system/notification-service
+  tag: "23"
+  pullPolicy: Always
+
+imagePullSecrets: []
+
+service:
+  type: ClusterIP
+  port: 5003
+  targetPort: 5003
+
+containerPort: 5003
+
+resources: {}
+
+env:
+  PORT: "5003"
+  JWT_SECRET: "mysecretkey"
+  MONGO_URI: "mongodb://mongodb:27017/taskdb"
+
+ingress:
+  enabled: true
+  className: nginx
+
+  host: notification.smarttask.local
+
+  path: /
+
+  pathType: Prefix

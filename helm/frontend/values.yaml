@@ -1,0 +1,31 @@
+
+replicaCount: 1
+
+image:
+  repository: 13.48.106.244/smart-task-management-system/frontend
+  tag: "36"
+  pullPolicy: Always
+
+imagePullSecrets: []
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+
+containerPort: 80
+
+resources: {}
+
+env:
+  NODE_ENV: "production"
+
+ingress:
+  enabled: true
+  className: nginx
+
+  host: frontend.smarttask.local
+
+  path: /
+
+  pathType: Prefix

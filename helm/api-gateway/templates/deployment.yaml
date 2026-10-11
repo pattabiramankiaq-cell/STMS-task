@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: {{ include "api-gateway.fullname" . }}
+  labels:
+    {{- include "api-gateway.labels" . | nindent 4 }}
+
+spec:
+  replicas: {{ .Values.replicaCount }}
+
+  selector:
+    matchLabels:
+      {{- include "api-gateway.selectorLabels" . | nindent 6 }}
+
+  template:
+    metadata:
+      labels:
+        {{- include "api-gateway.selectorLabels" . | nindent 8 }}
+
+    spec:
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+
+      containers:
+        - name: api-gateway
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          ports:
+            - containerPort: {{ .Values.containerPort }}
+
+          env:
+            - name: PORT
+              value: "{{ .Values.env.PORT }}"
+
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: smart-task-secret
+                  key: JWT_SECRET
+
+            - name: MONGO_URI
+              valueFrom:
+                secretKeyRef:
+                  name: smart-task-secret
+                  key: MONGO_URI
+
+            - name: AUTH_SERVICE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: smart-task-secret
+                  key: AUTH_SERVICE_URL
+
+            - name: TASK_SERVICE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: smart-task-secret
+                  key: TASK_SERVICE_URL
+
+            - name: NOTIFICATION_SERVICE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: smart-task-secret
+                  key: NOTIFICATION_SERVICE_URL
+
+            - name: REPORT_SERVICE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: smart-task-secret
+                  key: REPORT_SERVICE_URL
+
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+

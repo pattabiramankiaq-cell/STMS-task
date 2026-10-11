@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: {{ include "frontend.fullname" . }}
+
+spec:
+  replicas: {{ .Values.replicaCount }}
+
+  selector:
+    matchLabels:
+      app: {{ include "frontend.name" . }}
+
+  template:
+    metadata:
+      labels:
+        app: {{ include "frontend.name" . }}
+
+    spec:
+      containers:
+      - name: frontend
+
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+        ports:
+        - containerPort: {{ .Values.service.targetPort }}
+
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: {{ include "frontend.fullname" . }}
+  labels:
+    {{- include "frontend.labels" . | nindent 4 }}
+
+spec:
+  replicas: {{ .Values.replicaCount }}
+
+  selector:
+    matchLabels:
+      {{- include "frontend.selectorLabels" . | nindent 6 }}
+
+  template:
+    metadata:
+      labels:
+        {{- include "frontend.selectorLabels" . | nindent 8 }}
+
+    spec:
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+
+      containers:
+      - name: frontend
+
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+        ports:
+        - containerPort: {{ .Values.containerPort }}
+
+        env:
+        - name: NODE_ENV
+          value: "{{ .Values.env.NODE_ENV }}"
+
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}

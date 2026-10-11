@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+
+metadata:
+  name: auth-service
+  namespace: argocd
+
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/KameshS021/Smart-Task-Management-System.git
+    targetRevision: main
+    path: helm/auth-service
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: smart-task
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+
+    syncOptions:
+      - CreateNamespace=true

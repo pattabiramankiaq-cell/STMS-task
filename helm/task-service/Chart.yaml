@@ -1,0 +1,7 @@
+apiVersion: v2
+name: task-service
+description: Helm Chart for Smart Task Management Task Service
+type: application
+
+version: 0.1.0
+appVersion: "v1"

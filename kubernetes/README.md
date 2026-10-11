@@ -1,0 +1,1 @@
+Kubernetes manifests scaffold for Smart Task Management System.

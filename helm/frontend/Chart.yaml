@@ -1,0 +1,7 @@
+apiVersion: v2
+name: frontend
+description: Helm Chart for Smart Task Management Frontend
+type: application
+
+version: 0.1.0
+appVersion: "v1"
