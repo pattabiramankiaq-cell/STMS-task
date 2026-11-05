@@ -280,16 +280,14 @@ EOF
     }
 
     post {
-        always {
-            sh 'rm -f .env || true'
-            cleanWs()
-            echo 'Pipeline Finished'
-        }
-        success {
-            echo 'CI/CD Pipeline Executed Successfully'
-        }
-        failure {
-            echo 'CI/CD Pipeline Failed'
-        }
+    always {
+        echo 'Pipeline Finished'
     }
+    success {
+        echo 'CI/CD Pipeline Executed Successfully'
+    }
+    failure {
+        echo 'CI/CD Pipeline Failed'
+    }
+}
 }
