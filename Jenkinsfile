@@ -30,7 +30,7 @@ pipeline {
             steps {
                 git branch: 'main',
                     credentialsId: 'git-creds',
-                    url: 'https://github.com/KameshS021/Smart-Task-Management-System.git'
+                    url: 'https://github.com/pattabiramankiaq-cell/STMS-task.git'
             }
         }
 
