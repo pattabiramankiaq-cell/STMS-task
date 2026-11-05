@@ -29,7 +29,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'main',
-                    credentialsId: 'git-creds',
+                    credentialsId: 'gitcreds',
                     url: 'https://github.com/pattabiramankiaq-cell/STMS-task.git'
             }
         }
