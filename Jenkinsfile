@@ -1,216 +1,207 @@
+
 pipeline {
     agent any
 
     tools {
-        nodejs 'Node20'
+        nodejs 'NodeJS'
     }
 
     environment {
-        SCANNER_HOME = tool 'SonarScanner'
-
-        HARBOR_URL = "13.48.106.244"
-        HARBOR_PROJECT = "smart-task-management-system"
-
-        AUTH_IMAGE = "smart-task-management-system-auth-service"
-        TASK_IMAGE = "smart-task-management-system-task-service"
-        NOTIFICATION_IMAGE = "smart-task-management-system-notification-service"
-        REPORT_IMAGE = "smart-task-management-system-report-service"
-        API_IMAGE = "smart-task-management-system-api-gateway"
-        FRONTEND_IMAGE = "smart-task-management-system-frontend"
-
-        IMAGE_TAG = "${BUILD_NUMBER}"
-
-        VAULT_ADDR = "http://13.48.106.244:8200"
-        VAULT_SECRET_PATH = "secret/smart-task-management-system"
+        GIT_URL = 'https://github.com/pattabiramankiaq-cell/STMS-task.git'
+        HARBOR_REGISTRY = '172.22.160.254:9443'
+        HARBOR_PROJECT = 'smart-task'
+        K8S_NAMESPACE = 'stms'
+        SONAR_PROJECT_KEY = 'STMS'
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 git branch: 'main',
                     credentialsId: 'gitcreds',
-                    url: 'https://github.com/pattabiramankiaq-cell/STMS-task.git'
+                    url: "${GIT_URL}"
             }
         }
 
         stage('Install Dependencies') {
             steps {
                 sh '''
-                cd frontend && npm install
-                cd ../auth-service_1784011000189 && npm install
-                cd ../task-service && npm install
-                cd ../notification-service && npm install
-                cd ../report-service && npm install
-                cd ../api-gateway_1784010924579 && npm install
+                    set -e
+                    for dir in frontend auth-service_1784011000189 task-service notification-service report-service api-gateway_1784010924579; do
+                        echo "Installing dependencies: $dir"
+                        (cd "$dir" && npm install --no-audit --no-fund)
+                    done
                 '''
             }
         }
 
         stage('SonarQube Scan') {
-    steps {
-        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-            sh '''
-                echo "Checking SonarQube token from Jenkins..."
-                curl -sS -u "$SONAR_TOKEN:" \
-                http://localhost:9000/api/authentication/validate
-                echo
-            '''
+            steps {
+                script {
+                    def scannerHome = tool 'SonarScanner'
+                    withSonarQubeEnv('SonarQube') {
+                        sh """
+                            '${scannerHome}/bin/sonar-scanner' \
+                              -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                              -Dsonar.projectName=STMS \
+                              -Dsonar.sources=. \
+                              -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**
+                        """
+                    }
+                }
+            }
         }
-    }
-}
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: false
+                timeout(time: 10, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
 
         stage('Trivy File System Scan') {
             steps {
-                sh 'trivy fs --severity HIGH,CRITICAL --format table .'
+                sh '''
+                    trivy fs --exit-code 0 \
+                      --severity HIGH,CRITICAL \
+                      --no-progress .
+                '''
             }
         }
 
         stage('Build Docker Images') {
             steps {
-                sh 'docker compose build'
+                sh '''
+                    set -e
+                    docker build -t stms-frontend:latest ./frontend
+                    docker build -t stms-auth:latest ./auth-service_1784011000189
+                    docker build -t stms-task:latest ./task-service
+                    docker build -t stms-notification:latest ./notification-service
+                    docker build -t stms-report:latest ./report-service
+                    docker build -t stms-gateway:latest ./api-gateway_1784010924579
+                '''
             }
         }
 
         stage('Trivy Docker Image Scan') {
             steps {
-                sh """
-                trivy image --severity HIGH,CRITICAL ${AUTH_IMAGE}:latest
-                trivy image --severity HIGH,CRITICAL ${TASK_IMAGE}:latest
-                trivy image --severity HIGH,CRITICAL ${NOTIFICATION_IMAGE}:latest
-                trivy image --severity HIGH,CRITICAL ${REPORT_IMAGE}:latest
-                trivy image --severity HIGH,CRITICAL ${API_IMAGE}:latest
-                trivy image --severity HIGH,CRITICAL ${FRONTEND_IMAGE}:latest
-                """
+                sh '''
+                    set -e
+                    for image in stms-frontend stms-auth stms-task stms-notification stms-report stms-gateway; do
+                        trivy image --exit-code 0 \
+                          --severity HIGH,CRITICAL \
+                          --no-progress "$image:latest"
+                    done
+                '''
             }
         }
 
         stage('Fetch Secrets From Vault & Harbor Login') {
-            environment {
-                VAULT_TOKEN = credentials('vault-token-smart')
-                VAULT_ADDR = "http://13.48.106.244:8200"
-            }
-
             steps {
-                sh '''
-                export VAULT_ADDR=$VAULT_ADDR
-                export VAULT_SKIP_VERIFY=true
-                export VAULT_TOKEN=$VAULT_TOKEN
+                withCredentials([
+                    string(credentialsId: 'vault-token', variable: 'VAULT_TOKEN')
+                ]) {
+                    sh '''
+                        set +x
+                        export VAULT_ADDR="https://127.0.0.1:8200"
 
-                HARBOR_USER=$(vault kv get -field=HARBOR_USER secret/smart-task-management-system)
-                HARBOR_PASSWORD=$(vault kv get -field=HARBOR_PASSWORD secret/smart-task-management-system)
-                JWT_SECRET=$(vault kv get -field=JWT_SECRET secret/smart-task-management-system)
-                MONGO_URI=$(vault kv get -field=MONGO_URI secret/smart-task-management-system)
-                AUTH_SERVICE_URL=$(vault kv get -field=AUTH_SERVICE_URL secret/smart-task-management-system)
-                TASK_SERVICE_URL=$(vault kv get -field=TASK_SERVICE_URL secret/smart-task-management-system)
-                NOTIFICATION_SERVICE_URL=$(vault kv get -field=NOTIFICATION_SERVICE_URL secret/smart-task-management-system)
-                REPORT_SERVICE_URL=$(vault kv get -field=REPORT_SERVICE_URL secret/smart-task-management-system)
+                        command -v vault
+                        vault token lookup >/dev/null
+                    '''
+                }
 
-                echo "$HARBOR_PASSWORD" | docker login $HARBOR_URL \
-                    -u "$HARBOR_USER" \
-                    --password-stdin
-
-                cat > .env <<EOF
-JWT_SECRET=$JWT_SECRET
-MONGO_URI=$MONGO_URI
-AUTH_SERVICE_URL=$AUTH_SERVICE_URL
-TASK_SERVICE_URL=$TASK_SERVICE_URL
-NOTIFICATION_SERVICE_URL=$NOTIFICATION_SERVICE_URL
-REPORT_SERVICE_URL=$REPORT_SERVICE_URL
-EOF
-                '''
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'harbor-creds',
+                        usernameVariable: 'HARBOR_USER',
+                        passwordVariable: 'HARBOR_PASS'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+                        echo "$HARBOR_PASS" | docker login \
+                          "$HARBOR_REGISTRY" \
+                          --username "$HARBOR_USER" \
+                          --password-stdin
+                    '''
+                }
             }
         }
 
         stage('Create Kubernetes Secret') {
-            environment {
-                VAULT_TOKEN = credentials('vault-token-smart')
-                VAULT_ADDR = "http://13.48.106.244:8200"
-            }
-
             steps {
-                sh '''
-                export VAULT_ADDR=$VAULT_ADDR
-                export VAULT_TOKEN=$VAULT_TOKEN
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'harbor-creds',
+                        usernameVariable: 'HARBOR_USER',
+                        passwordVariable: 'HARBOR_PASS'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+                        kubectl create namespace "$K8S_NAMESPACE" \
+                          --dry-run=client -o yaml | kubectl apply -f -
 
-                JWT_SECRET=$(vault kv get -field=JWT_SECRET secret/smart-task-management-system)
-                MONGO_URI=$(vault kv get -field=MONGO_URI secret/smart-task-management-system)
-                AUTH_SERVICE_URL=$(vault kv get -field=AUTH_SERVICE_URL secret/smart-task-management-system)
-                TASK_SERVICE_URL=$(vault kv get -field=TASK_SERVICE_URL secret/smart-task-management-system)
-                NOTIFICATION_SERVICE_URL=$(vault kv get -field=NOTIFICATION_SERVICE_URL secret/smart-task-management-system)
-                REPORT_SERVICE_URL=$(vault kv get -field=REPORT_SERVICE_URL secret/smart-task-management-system)
-
-                kubectl create secret generic smart-task-secret \
-                    --namespace smart-task \
-                    --from-literal=JWT_SECRET="$JWT_SECRET" \
-                    --from-literal=MONGO_URI="$MONGO_URI" \
-                    --from-literal=AUTH_SERVICE_URL="$AUTH_SERVICE_URL" \
-                    --from-literal=TASK_SERVICE_URL="$TASK_SERVICE_URL" \
-                    --from-literal=NOTIFICATION_SERVICE_URL="$NOTIFICATION_SERVICE_URL" \
-                    --from-literal=REPORT_SERVICE_URL="$REPORT_SERVICE_URL" \
-                    --dry-run=client -o yaml | kubectl apply -f -
-                '''
+                        kubectl create secret docker-registry harbor-secret \
+                          --docker-server="$HARBOR_REGISTRY" \
+                          --docker-username="$HARBOR_USER" \
+                          --docker-password="$HARBOR_PASS" \
+                          -n "$K8S_NAMESPACE" \
+                          --dry-run=client -o yaml | kubectl apply -f -
+                    '''
+                }
             }
         }
 
         stage('Tag Docker Images') {
             steps {
-                sh """
-                docker tag ${AUTH_IMAGE}:latest $HARBOR_URL/$HARBOR_PROJECT/auth-service:${IMAGE_TAG}
-                docker tag ${TASK_IMAGE}:latest $HARBOR_URL/$HARBOR_PROJECT/task-service:${IMAGE_TAG}
-                docker tag ${NOTIFICATION_IMAGE}:latest $HARBOR_URL/$HARBOR_PROJECT/notification-service:${IMAGE_TAG}
-                docker tag ${REPORT_IMAGE}:latest $HARBOR_URL/$HARBOR_PROJECT/report-service:${IMAGE_TAG}
-                docker tag ${API_IMAGE}:latest $HARBOR_URL/$HARBOR_PROJECT/api-gateway:${IMAGE_TAG}
-                docker tag ${FRONTEND_IMAGE}:latest $HARBOR_URL/$HARBOR_PROJECT/frontend:${IMAGE_TAG}
-                """
+                sh '''
+                    set -e
+                    for image in frontend auth task notification report gateway; do
+                        docker tag "stms-$image:latest" \
+                          "$HARBOR_REGISTRY/$HARBOR_PROJECT/stms-$image:$BUILD_NUMBER"
+                    done
+                '''
             }
         }
 
         stage('Push Images to Harbor') {
             steps {
-                sh """
-                docker push $HARBOR_URL/$HARBOR_PROJECT/auth-service:${IMAGE_TAG}
-                docker push $HARBOR_URL/$HARBOR_PROJECT/task-service:${IMAGE_TAG}
-                docker push $HARBOR_URL/$HARBOR_PROJECT/notification-service:${IMAGE_TAG}
-                docker push $HARBOR_URL/$HARBOR_PROJECT/report-service:${IMAGE_TAG}
-                docker push $HARBOR_URL/$HARBOR_PROJECT/api-gateway:${IMAGE_TAG}
-                docker push $HARBOR_URL/$HARBOR_PROJECT/frontend:${IMAGE_TAG}
-                """
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'harbor-creds',
+                        usernameVariable: 'HARBOR_USER',
+                        passwordVariable: 'HARBOR_PASS'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+                        echo "$HARBOR_PASS" | docker login \
+                          "$HARBOR_REGISTRY" \
+                          -u "$HARBOR_USER" --password-stdin
+
+                        set -e
+                        for image in frontend auth task notification report gateway; do
+                            docker push \
+                              "$HARBOR_REGISTRY/$HARBOR_PROJECT/stms-$image:$BUILD_NUMBER"
+                        done
+                    '''
+                }
             }
         }
 
         stage('Helm Lint') {
             steps {
-                sh '''
-                helm lint helm/frontend
-                helm lint helm/api-gateway
-                helm lint helm/auth-service
-                helm lint helm/task-service
-                helm lint helm/notification-service
-                helm lint helm/report-service
-                '''
+                sh 'helm lint ./helm/stms'
             }
         }
 
         stage('Helm Package') {
             steps {
                 sh '''
-                mkdir -p helm-packages
-
-                helm package helm/frontend -d helm-packages
-                helm package helm/api-gateway -d helm-packages
-                helm package helm/auth-service -d helm-packages
-                helm package helm/task-service -d helm-packages
-                helm package helm/notification-service -d helm-packages
-                helm package helm/report-service -d helm-packages
+                    mkdir -p helm-packages
+                    helm package ./helm/stms -d helm-packages
                 '''
             }
         }
@@ -218,41 +209,12 @@ EOF
         stage('Deploy to Kubernetes using Helm') {
             steps {
                 sh '''
-                helm upgrade --install frontend helm/frontend \
-                    -n smart-task \
-                    --create-namespace \
-                    --set image.tag=${IMAGE_TAG}
-
-                helm upgrade --install api-gateway helm/api-gateway \
-                    -n smart-task \
-                    --create-namespace \
-                    --set image.tag=${IMAGE_TAG} \
-                    --set env.JWT_SECRET="${JWT_SECRET}" \
-                    --set env.MONGO_URI="${MONGO_URI}" \
-                    --set env.AUTH_SERVICE_URL="${AUTH_SERVICE_URL}" \
-                    --set env.TASK_SERVICE_URL="${TASK_SERVICE_URL}" \
-                    --set env.NOTIFICATION_SERVICE_URL="${NOTIFICATION_SERVICE_URL}" \
-                    --set env.REPORT_SERVICE_URL="${REPORT_SERVICE_URL}"
-
-                helm upgrade --install auth-service helm/auth-service \
-                    -n smart-task \
-                    --create-namespace \
-                    --set image.tag=${IMAGE_TAG}
-
-                helm upgrade --install task-service helm/task-service \
-                    -n smart-task \
-                    --create-namespace \
-                    --set image.tag=${IMAGE_TAG}
-
-                helm upgrade --install notification-service helm/notification-service \
-                    -n smart-task \
-                    --create-namespace \
-                    --set image.tag=${IMAGE_TAG}
-
-                helm upgrade --install report-service helm/report-service \
-                    -n smart-task \
-                    --create-namespace \
-                    --set image.tag=${IMAGE_TAG}
+                    helm upgrade --install stms ./helm/stms \
+                      --namespace "$K8S_NAMESPACE" \
+                      --create-namespace \
+                      --set image.registry="$HARBOR_REGISTRY" \
+                      --set image.project="$HARBOR_PROJECT" \
+                      --set image.tag="$BUILD_NUMBER"
                 '''
             }
         }
@@ -260,33 +222,25 @@ EOF
         stage('Verify Kubernetes Deployment') {
             steps {
                 sh '''
-                kubectl get nodes
-                kubectl get deployments -n smart-task
-                kubectl get pods -n smart-task
-                kubectl get svc -n smart-task
-                kubectl get ingress -n smart-task
-                helm list -n smart-task
-
-                kubectl rollout status deployment/frontend-frontend -n smart-task
-                kubectl rollout status deployment/api-gateway-api-gateway -n smart-task
-                kubectl rollout status deployment/auth-service-auth-service -n smart-task
-                kubectl rollout status deployment/task-service-task-service -n smart-task
-                kubectl rollout status deployment/notification-service-notification-service -n smart-task
-                kubectl rollout status deployment/report-service-report-service -n smart-task
+                    kubectl get pods -n "$K8S_NAMESPACE"
+                    kubectl get services -n "$K8S_NAMESPACE"
+                    kubectl get deployments -n "$K8S_NAMESPACE"
+                    helm status stms -n "$K8S_NAMESPACE"
                 '''
             }
         }
     }
 
     post {
-    always {
-        echo 'Pipeline Finished'
-    }
-    success {
-        echo 'CI/CD Pipeline Executed Successfully'
-    }
-    failure {
-        echo 'CI/CD Pipeline Failed'
+        success {
+            echo 'STMS CI/CD Pipeline Completed Successfully'
+        }
+        failure {
+            echo 'STMS CI/CD Pipeline Failed'
+        }
+        always {
+            echo 'Pipeline Finished'
+        }
     }
 }
-}
+
