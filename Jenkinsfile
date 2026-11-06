@@ -35,6 +35,57 @@ pipeline {
             }
         }
 
+        stage('Validate Frontend Infrastructure') {
+            steps {
+                sh '''
+                    set -e
+                    terraform -chdir=terraform/frontend fmt -check
+                    terraform -chdir=terraform/frontend init -input=false
+                    terraform -chdir=terraform/frontend validate
+                '''
+            }
+        }
+
+        stage('Build Frontend for S3') {
+            steps {
+                sh '''
+                    set -e
+                    cd frontend
+                    npm run build
+                    test -f dist/index.html
+                '''
+            }
+        }
+
+        stage('Deploy Frontend to Floci S3') {
+            steps {
+                withEnv([
+                    'AWS_ACCESS_KEY_ID=test',
+                    'AWS_SECRET_ACCESS_KEY=test',
+                    'AWS_DEFAULT_REGION=us-east-1'
+                ]) {
+                    sh '''
+                        set -e
+
+                        aws --endpoint-url=http://localhost:4566 s3 sync \
+                          frontend/dist/ \
+                          s3://stms-frontend-site-000000000000/
+
+                        aws --endpoint-url=http://localhost:4566 s3api head-object \
+                          --bucket stms-frontend-site-000000000000 \
+                          --key index.html
+
+                        curl -fsS \
+                          -H "Host: epk4noswmyqfie.cloudfront.net" \
+                          http://localhost:4566/ \
+                          -o /dev/null
+
+                        echo "Frontend S3 and CloudFront verification successful"
+                    '''
+                }
+            }
+        }
+
         stage('SonarQube Scan') {
             steps {
                 script {
