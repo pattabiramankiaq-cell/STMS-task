@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/api";
 
@@ -6,18 +6,34 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState([]);
 
-  useEffect(() => {
-    fetchTasks();
-  }, []);
-
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     try {
       const res = await api.get("/api/tasks/all");
       setTasks(res.data.tasks);
     } catch (err) {
       console.log(err.response?.data || err.message);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    api.get("/api/tasks/all")
+      .then((res) => {
+        if (!cancelled) {
+          setTasks(res.data.tasks);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.log(err.response?.data || err.message);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleDelete = async (id) => {
     const confirmDelete = window.confirm(
